@@ -327,9 +327,8 @@ input:focus-visible {
   min-height: 0;
   padding: 9px 10px;
   display: grid;
-  grid-template-columns: 62px 1fr;
-  gap: 8px;
-  align-items: center;
+  gap: 4px;
+  align-items: start;
   text-align: left;
   background: #f4f6f4;
   color: var(--ink);
@@ -347,9 +346,18 @@ input:focus-visible {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.mini-list button strong,
+.mini-list button span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mini-list button strong {
+  font-size: 14px;
 }
 
 .content {

@@ -4,10 +4,13 @@ const metricGrid = document.querySelector("#metric-grid");
 const warning = document.querySelector("#warning");
 const compareForm = document.querySelector("#compare-form");
 const compareInput = document.querySelector("#compare-symbols");
+const suggestionBox = document.querySelector("#search-suggestions");
 let trendZoom = 1;
 let latestTrendSeries = null;
 let currentData = null;
 let currentMemoText = "";
+let searchTimer = null;
+let searchAbort = null;
 const storageKeys = {
   history: "munger.history",
   watchlist: "munger.watchlist",
@@ -152,6 +155,44 @@ function renderStoredLists() {
   };
   renderList("#watchlist", storageKeys.watchlist, "还没有收藏的公司。");
   renderList("#history-list", storageKeys.history, "分析后会自动记录。");
+}
+
+function hideSuggestions() {
+  suggestionBox.hidden = true;
+  suggestionBox.innerHTML = "";
+}
+
+function renderSuggestions(results) {
+  if (!results.length) {
+    hideSuggestions();
+    return;
+  }
+  suggestionBox.innerHTML = results.map((item) => `
+    <button type="button" data-suggest-symbol="${escapeHtml(item.symbol)}">
+      <strong>${escapeHtml(item.symbol)}</strong>
+      <span>${escapeHtml(item.name || item.symbol)}</span>
+      <small>${escapeHtml([item.exchange, item.sector].filter(Boolean).join(" · ") || item.source || "")}</small>
+    </button>
+  `).join("");
+  suggestionBox.hidden = false;
+}
+
+async function searchSymbols(query) {
+  const value = query.trim();
+  if (value.length < 2) {
+    hideSuggestions();
+    return;
+  }
+  if (searchAbort) searchAbort.abort();
+  searchAbort = new AbortController();
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(value)}`, { signal: searchAbort.signal });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "搜索不可用");
+    renderSuggestions(data.results || []);
+  } catch (error) {
+    if (error.name !== "AbortError") hideSuggestions();
+  }
 }
 
 function renderMetrics(data) {
@@ -728,21 +769,43 @@ async function analyze(symbol) {
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
+  hideSuggestions();
   analyze(input.value.trim() || "AAPL");
+});
+
+input.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => searchSymbols(input.value), 220);
+});
+
+input.addEventListener("focus", () => {
+  if (suggestionBox.innerHTML.trim()) suggestionBox.hidden = false;
 });
 
 document.querySelectorAll("[data-symbol]").forEach((button) => {
   button.addEventListener("click", () => {
     input.value = button.dataset.symbol;
+    hideSuggestions();
     analyze(input.value);
   });
 });
 
 document.addEventListener("click", (event) => {
+  const suggestButton = event.target.closest("[data-suggest-symbol]");
+  if (suggestButton) {
+    input.value = suggestButton.dataset.suggestSymbol;
+    hideSuggestions();
+    analyze(input.value);
+    return;
+  }
   const loadButton = event.target.closest("[data-load-symbol]");
-  if (!loadButton) return;
-  input.value = loadButton.dataset.loadSymbol;
-  analyze(input.value);
+  if (loadButton) {
+    input.value = loadButton.dataset.loadSymbol;
+    hideSuggestions();
+    analyze(input.value);
+    return;
+  }
+  if (!event.target.closest(".search-box")) hideSuggestions();
 });
 
 document.querySelector("#save-current").addEventListener("click", () => {

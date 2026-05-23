@@ -21,14 +21,16 @@
           <form id="analyze-form" class="search-box">
             <label for="symbol">股票代码</label>
             <div class="input-row">
-              <input id="symbol" name="symbol" value="AAPL" autocomplete="off" spellcheck="false" />
+              <input id="symbol" name="symbol" value="AAPL" autocomplete="off" spellcheck="false" aria-describedby="search-help" />
               <button type="submit">分析</button>
             </div>
+            <p id="search-help" class="search-help">支持公司名、代码、港股 / A 股 / 韩股后缀，例如 0700.HK、600519.SS、005930.KS。</p>
+            <div id="search-suggestions" class="search-suggestions" hidden></div>
             <div class="quick-symbols" aria-label="常用股票">
               <button type="button" data-symbol="AAPL">AAPL</button>
               <button type="button" data-symbol="MSFT">MSFT</button>
-              <button type="button" data-symbol="BRK.B">BRK.B</button>
-              <button type="button" data-symbol="NVDA">NVDA</button>
+              <button type="button" data-symbol="0700.HK">0700.HK</button>
+              <button type="button" data-symbol="005930.KS">005930.KS</button>
             </div>
           </form>
 
@@ -260,6 +262,6 @@
       <strong id="info-title"></strong>
       <p id="info-body"></p>
     </div>
-    <script src="/app.js?v=20260523-market-repricing" type="module"></script>
+    <script src="/app.js?v=20260523-global-search" type="module"></script>
   </body>
 </html>

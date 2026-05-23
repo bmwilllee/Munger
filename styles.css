@@ -108,6 +108,7 @@ p {
 }
 
 .search-box {
+  position: relative;
   display: grid;
   gap: 10px;
 }
@@ -162,6 +163,66 @@ input:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 7px;
+}
+
+.search-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.search-suggestions {
+  position: absolute;
+  z-index: 12;
+  top: 102px;
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 320px;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid rgba(181, 138, 42, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 42px rgba(24, 32, 29, 0.18);
+}
+
+.search-suggestions button {
+  min-height: 0;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  gap: 4px 10px;
+  text-align: left;
+  background: #fbfaf5;
+  color: var(--ink);
+  border: 1px solid transparent;
+}
+
+.search-suggestions button:hover {
+  border-color: var(--gold);
+  filter: none;
+}
+
+.search-suggestions strong {
+  grid-row: span 2;
+  align-self: center;
+  font-size: 14px;
+}
+
+.search-suggestions span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.search-suggestions small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quick-symbols button {

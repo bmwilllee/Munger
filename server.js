@@ -16,6 +16,8 @@ const mime = {
 
 const secUserAgent = process.env.SEC_USER_AGENT || "munger-value-analyzer dongheng.li@example.local";
 let tickerCache = null;
+const yahooSearchCache = new Map();
+const fxCache = new Map();
 
 function n(value, fallback = null) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -501,6 +503,14 @@ async function fetchJson(url, headers = {}) {
   return res.json();
 }
 
+function yahooHeaders(extra = {}) {
+  return {
+    "user-agent": "Mozilla/5.0 MungerValueAnalyzer/1.0",
+    "accept": "application/json,text/plain,*/*",
+    ...extra,
+  };
+}
+
 async function fetchText(url, headers = {}) {
   const res = await fetch(url, {
     headers: {
@@ -572,6 +582,27 @@ async function fetchStooqQuote(symbol) {
   };
 }
 
+async function fetchYahooChart(symbol, range = "1y", interval = "1d") {
+  const normalized = symbol.toUpperCase();
+  return fetchJson(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalized)}?range=${range}&interval=${interval}`, yahooHeaders());
+}
+
+async function fetchYahooQuote(symbol) {
+  const data = await fetchYahooChart(symbol, "5d", "1d");
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta;
+  if (!meta?.regularMarketPrice) throw new Error(`Yahoo has no quote for ${symbol}`);
+  return {
+    symbol: meta.symbol || symbol,
+    price: n(meta.regularMarketPrice),
+    currency: meta.currency || "USD",
+    quoteTime: meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString().slice(0, 19).replace("T", " ") : null,
+    shortName: meta.shortName || meta.longName || symbol,
+    longName: meta.longName || meta.shortName || symbol,
+    exchangeName: meta.fullExchangeName || meta.exchangeName || "Yahoo Finance",
+  };
+}
+
 async function fetchStooqHistory(symbol) {
   const stooqSymbol = `${symbol.toLowerCase().replace(/\./g, "-")}.us`;
   const end = new Date();
@@ -604,10 +635,8 @@ async function fetchStooqHistory(symbol) {
 }
 
 async function fetchYahooHistory(symbol) {
-  const normalized = symbol.toUpperCase().replace(/\./g, "-");
-  const data = await fetchJson(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalized)}?range=1y&interval=1d`, {
-    "user-agent": "Mozilla/5.0 MungerValueAnalyzer/1.0",
-  });
+  const normalized = symbol.toUpperCase();
+  const data = await fetchYahooChart(normalized, "1y", "1d");
   const result = data?.chart?.result?.[0];
   const timestamps = result?.timestamp || [];
   const closes = result?.indicators?.quote?.[0]?.close || [];
@@ -635,6 +664,151 @@ async function fetchMarketTape(symbol) {
   } catch {
     return fetchYahooHistory(symbol).catch(() => null);
   }
+}
+
+async function searchYahooSymbols(query) {
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const cacheKey = q.toLowerCase();
+  if (yahooSearchCache.has(cacheKey)) return yahooSearchCache.get(cacheKey);
+  const data = await fetchJson(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0&enableFuzzyQuery=true`, yahooHeaders());
+  const quotes = (data.quotes || [])
+    .filter((item) => item.quoteType === "EQUITY" && item.symbol)
+    .map((item) => ({
+      symbol: item.symbol,
+      name: item.longname || item.shortname || item.symbol,
+      exchange: item.exchDisp || item.exchange || "",
+      sector: item.sectorDisp || item.sector || "",
+      industry: item.industryDisp || item.industry || "",
+      source: "Yahoo Finance",
+    }));
+  yahooSearchCache.set(cacheKey, quotes);
+  return quotes;
+}
+
+function symbolCandidates(raw) {
+  const value = String(raw || "").trim().toUpperCase();
+  if (!value) return [];
+  const clean = value.replace(/\s+/g, "");
+  const candidates = [clean];
+  if (/^\d{1,5}$/.test(clean)) {
+    candidates.push(`${clean.padStart(4, "0")}.HK`);
+  }
+  if (/^\d{6}$/.test(clean)) {
+    if (clean.startsWith("6") || clean.startsWith("9")) candidates.push(`${clean}.SS`);
+    if (/^[023]/.test(clean)) candidates.push(`${clean}.SZ`);
+    candidates.push(`${clean}.KS`, `${clean}.KQ`);
+  }
+  if (/^[A-Z]{1,5}$/.test(clean)) candidates.push(`${clean}.HK`, `${clean}.KS`);
+  return [...new Set(candidates)];
+}
+
+async function resolveGlobalSymbol(input) {
+  const candidates = symbolCandidates(input);
+  for (const candidate of candidates) {
+    try {
+      await fetchYahooQuote(candidate);
+      return candidate;
+    } catch {
+      // Try next normalized symbol.
+    }
+  }
+  const results = await searchYahooSymbols(input);
+  if (results[0]?.symbol) return results[0].symbol;
+  throw new Error(`Cannot resolve symbol ${input}`);
+}
+
+function annualType(result, type) {
+  return result.find((item) => item.meta?.type?.includes(type))?.[type] || [];
+}
+
+function yearlyMap(result, type) {
+  const map = new Map();
+  for (const item of annualType(result, type)) {
+    const year = Number(String(item.asOfDate || "").slice(0, 4));
+    const raw = n(item.reportedValue?.raw);
+    const currency = item.currencyCode || null;
+    if (year && Number.isFinite(raw)) map.set(year, { value: raw, currency, filed: item.asOfDate });
+  }
+  return map;
+}
+
+async function fetchFxRate(fromCurrency, toCurrency) {
+  if (!fromCurrency || !toCurrency || fromCurrency === toCurrency) return 1;
+  const pair = `${fromCurrency}${toCurrency}=X`;
+  if (fxCache.has(pair)) return fxCache.get(pair);
+  const quote = await fetchYahooQuote(pair);
+  const rate = quote.price || 1;
+  fxCache.set(pair, rate);
+  return rate;
+}
+
+async function fetchYahooFundamentals(symbol, quote) {
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - 10 * 366 * 24 * 60 * 60;
+  const types = [
+    "annualTotalRevenue",
+    "annualOperatingIncome",
+    "annualNetIncome",
+    "annualFreeCashFlow",
+    "annualStockholdersEquity",
+    "annualTotalDebt",
+    "annualCashCashEquivalentsAndShortTermInvestments",
+    "annualDilutedAverageShares",
+  ];
+  const data = await fetchJson(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?type=${types.join(",")}&period1=${start}&period2=${end}`, yahooHeaders());
+  const result = data?.timeseries?.result || [];
+  const revenue = yearlyMap(result, "annualTotalRevenue");
+  const operatingIncome = yearlyMap(result, "annualOperatingIncome");
+  const netIncome = yearlyMap(result, "annualNetIncome");
+  const freeCashFlow = yearlyMap(result, "annualFreeCashFlow");
+  const equity = yearlyMap(result, "annualStockholdersEquity");
+  const debt = yearlyMap(result, "annualTotalDebt");
+  const cash = yearlyMap(result, "annualCashCashEquivalentsAndShortTermInvestments");
+  const shares = yearlyMap(result, "annualDilutedAverageShares");
+  const candidateYears = [...revenue.keys()]
+    .filter((year) => netIncome.has(year) && freeCashFlow.has(year) && equity.has(year))
+    .sort((a, b) => a - b)
+    .slice(-4);
+  if (candidateYears.length < 2) throw new Error(`${symbol} has insufficient Yahoo annual fundamentals`);
+  const latestShares = valueForYear(shares, candidateYears.at(-1));
+  const financialCurrency = revenue.get(candidateYears.at(-1))?.currency || quote.currency;
+  const fx = await fetchFxRate(financialCurrency, quote.currency);
+  const moneyToQuoteMillions = (value, fallback = null) => Number.isFinite(value) ? (value * fx) / 1_000_000 : fallback;
+  const financials = {
+    revenue: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(revenue, year))),
+    operatingIncome: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(operatingIncome, year, valueForYear(netIncome, year)))),
+    netIncome: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(netIncome, year))),
+    freeCashFlow: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(freeCashFlow, year))),
+    bookValue: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(equity, year))),
+    debt: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(debt, year, 0), 0)),
+    cash: candidateYears.map((year) => moneyToQuoteMillions(valueForYear(cash, year, 0), 0)),
+    shares: candidateYears.map((year) => million(valueForYear(shares, year, latestShares))),
+  };
+  return {
+    symbol: quote.symbol || symbol,
+    shortName: quote.longName || quote.shortName || symbol,
+    sector: "Global equity",
+    industry: quote.exchangeName || "Yahoo Finance",
+    profile: "Financial statements sourced from Yahoo Finance global fundamentals.",
+    years: candidateYears.map(String),
+    dataQuality: {
+      fiscalYears: candidateYears.map(String),
+      latestFiled: `${candidateYears.at(-1)}-12-31`,
+      missingFields: [
+        operatingIncome.size ? null : "经营利润",
+        debt.size ? null : "债务",
+        cash.size ? null : "现金",
+        shares.size ? null : "稀释股数",
+      ].filter(Boolean),
+      fallbackFields: financialCurrency !== quote.currency
+        ? [`财务报表币种 ${financialCurrency} 已按 Yahoo 汇率换算为交易币种 ${quote.currency}`]
+        : [],
+      sourceCoverage: `${candidateYears.length} 年 Yahoo 全球财务数据`,
+      financialCurrency,
+    },
+    financials,
+  };
 }
 
 async function fetchSecTickerMap() {
@@ -797,22 +971,61 @@ async function fetchRealCompany(symbol) {
   };
 }
 
+async function fetchGlobalCompany(symbol) {
+  const resolved = await resolveGlobalSymbol(symbol);
+  const [quote, marketTape] = await Promise.all([
+    fetchYahooQuote(resolved),
+    fetchMarketTape(resolved),
+  ]);
+  const fundamentals = await fetchYahooFundamentals(resolved, quote);
+  const latestShares = last(fundamentals.financials.shares);
+  const marketCap = quote.price && latestShares ? quote.price * latestShares * 1_000_000 : null;
+  return {
+    ...fundamentals,
+    symbol: quote.symbol || fundamentals.symbol,
+    shortName: quote.longName || quote.shortName || fundamentals.shortName,
+    currency: quote.currency,
+    price: quote.price,
+    marketCap,
+    beta: null,
+    quoteTime: quote.quoteTime,
+    marketTape,
+  };
+}
+
 async function handleAnalyze(req, res, url) {
   const raw = (url.searchParams.get("symbol") || "AAPL").trim().toUpperCase();
-  const symbol = raw.replace(/[^A-Z0-9.^-]/g, "").slice(0, 16);
+  const symbol = raw.replace(/[^A-Z0-9.^\-\s\u4e00-\u9fa5]/g, "").slice(0, 32);
 
   try {
-    const company = await fetchRealCompany(symbol);
-    const data = analyze(company, `SEC EDGAR 年报财务数据 + Stooq 最新行情${company.quoteTime ? ` (${company.quoteTime})` : ""}`);
+    let company;
+    let sourceLabel;
+    try {
+      company = await fetchRealCompany(symbol);
+      sourceLabel = `SEC EDGAR 年报财务数据 + Stooq 最新行情${company.quoteTime ? ` (${company.quoteTime})` : ""}`;
+    } catch (secError) {
+      company = await fetchGlobalCompany(symbol);
+      sourceLabel = `Yahoo Finance 全球财务数据 + Yahoo 最新行情${company.quoteTime ? ` (${company.quoteTime})` : ""}`;
+      company.dataQuality = {
+        ...(company.dataQuality || {}),
+        fallbackFields: [
+          ...(company.dataQuality?.fallbackFields || []),
+          `SEC 不支持或未匹配该标的，已切换全球数据源：${secError.message}`,
+        ],
+      };
+    }
+    const data = analyze(company, sourceLabel);
     data.series.years = company.years || data.series.years;
     data.dataQuality = {
       ...(company.dataQuality || {}),
       quoteTime: company.quoteTime || null,
-      quoteSource: "Stooq",
-      filingSource: "SEC EDGAR Company Facts",
+      quoteSource: sourceLabel.includes("Yahoo") ? "Yahoo Finance" : "Stooq",
+      filingSource: sourceLabel.includes("Yahoo") ? "Yahoo Finance Fundamentals" : "SEC EDGAR Company Facts",
       confidence: (company.dataQuality?.missingFields?.length || 0) === 0 ? "高" : "中",
     };
-    data.notice = "当前版本使用真实公开数据源；Stooq 报价可能有交易所延迟，SEC 财务数据来自最新已披露年报。";
+    data.notice = sourceLabel.includes("Yahoo")
+      ? "全球股票使用 Yahoo Finance 行情和年度财务时间序列；不同市场披露口径、币种和延迟可能不同，请用原始公告复核。"
+      : "当前版本使用真实公开数据源；Stooq 报价可能有交易所延迟，SEC 财务数据来自最新已披露年报。";
     sendJson(res, data);
   } catch (error) {
     sendJson(res, {
@@ -820,6 +1033,38 @@ async function handleAnalyze(req, res, url) {
       message: `无法取得 ${symbol} 的真实行情或财务数据：${error.message}`,
       hint: "目前免 key 模式支持 SEC 可识别的美国上市公司，行情使用 Stooq。若要覆盖更多市场或交易所直连实时数据，请配置专业行情 API。",
     }, 502);
+  }
+}
+
+async function handleSearch(req, res, url) {
+  const raw = (url.searchParams.get("q") || "").trim();
+  if (!raw) {
+    sendJson(res, { results: [] });
+    return;
+  }
+  try {
+    const compact = raw.trim().toUpperCase().replace(/\s+/g, "");
+    const looksLikeCode = /[\d.-]/.test(compact) || /^[A-Z]{1,5}$/.test(compact);
+    const normalized = (looksLikeCode ? symbolCandidates(raw) : []).map((symbol) => ({
+      symbol,
+      name: `尝试代码 ${symbol}`,
+      exchange: symbol.includes(".HK") ? "Hong Kong" : symbol.includes(".SS") ? "Shanghai" : symbol.includes(".SZ") ? "Shenzhen" : symbol.includes(".KS") ? "Korea" : "",
+      sector: "",
+      industry: "",
+      source: "Symbol matcher",
+    }));
+    const yahoo = await searchYahooSymbols(raw).catch(() => []);
+    const seen = new Set();
+    const results = [...normalized, ...yahoo]
+      .filter((item) => {
+        if (seen.has(item.symbol)) return false;
+        seen.add(item.symbol);
+        return true;
+      })
+      .slice(0, 10);
+    sendJson(res, { results });
+  } catch (error) {
+    sendJson(res, { error: "SEARCH_UNAVAILABLE", message: error.message, results: [] }, 502);
   }
 }
 
@@ -850,6 +1095,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === "/api/analyze") {
     await handleAnalyze(req, res, url);
+    return;
+  }
+  if (url.pathname === "/api/search") {
+    await handleSearch(req, res, url);
     return;
   }
   await serveStatic(req, res, url);

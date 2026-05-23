@@ -1,14 +1,16 @@
 :root {
   color-scheme: light;
   --ink: #18201d;
+  --ink-2: #232018;
   --muted: #627069;
   --line: #d9dfda;
   --panel: #ffffff;
-  --page: #f4f1ea;
+  --page: #efede6;
   --accent: #0c6b58;
   --accent-2: #ba5b2f;
   --blue: #285f8f;
   --gold: #b58a2a;
+  --gold-soft: #eadfbd;
   --danger: #b94343;
   --soft: #f7f8f4;
   --shadow: 0 18px 45px rgba(24, 32, 29, 0.1);
@@ -21,7 +23,9 @@
 body {
   margin: 0;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: var(--page);
+  background:
+    linear-gradient(180deg, rgba(24, 32, 29, 0.08), transparent 270px),
+    var(--page);
   color: var(--ink);
 }
 
@@ -49,6 +53,7 @@ input {
   background: var(--panel);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
 }
 
 .side-panel {
@@ -75,8 +80,9 @@ input {
   width: 44px;
   height: 44px;
   border-radius: 6px;
-  background: var(--ink);
+  background: linear-gradient(145deg, #171b19, #343026);
   color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(234, 223, 189, 0.24);
   font-weight: 800;
   font-size: 22px;
 }
@@ -287,12 +293,21 @@ input:focus-visible {
   justify-content: space-between;
   gap: 18px;
   align-items: center;
+  background:
+    linear-gradient(135deg, #191f1c, #332d22 62%, #4b3920);
+  color: #fff;
+  border-color: rgba(234, 223, 189, 0.28);
 }
 
 .topbar h2 {
   font-size: 28px;
   line-height: 1.12;
   margin-top: 5px;
+}
+
+.topbar p,
+.topbar .price-tile span {
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .price-tile {
@@ -308,6 +323,7 @@ input:focus-visible {
 
 .price-tile strong {
   font-size: 30px;
+  color: var(--gold-soft);
 }
 
 .warning {
@@ -330,7 +346,8 @@ input:focus-visible {
   padding: 15px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: #fbfcfb;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 248, 244, 0.94));
   box-shadow: 0 10px 28px rgba(24, 32, 29, 0.07);
 }
 
@@ -363,6 +380,11 @@ input:focus-visible {
   border-radius: 8px;
   padding: 15px;
   min-height: 108px;
+  box-shadow: 0 10px 30px rgba(24, 32, 29, 0.06);
+}
+
+.metric:hover {
+  border-color: rgba(181, 138, 42, 0.44);
 }
 
 .metric span {
@@ -568,6 +590,179 @@ input:focus-visible {
 
 .bar-fill.price {
   background: var(--accent-2);
+}
+
+.bar-fill.market {
+  background: var(--gold);
+}
+
+.market-brief {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(430px, 0.8fr);
+  gap: 18px;
+  align-items: stretch;
+  padding: 20px;
+  background:
+    linear-gradient(135deg, #151a18, #2a251e 58%, #3e311f);
+  color: #fff;
+  border-color: rgba(234, 223, 189, 0.26);
+  overflow: hidden;
+}
+
+.market-brief.strong {
+  box-shadow: 0 18px 45px rgba(12, 107, 88, 0.2);
+}
+
+.market-brief.watch {
+  box-shadow: 0 18px 45px rgba(181, 138, 42, 0.18);
+}
+
+.market-brief.stretched {
+  box-shadow: 0 18px 45px rgba(185, 67, 67, 0.14);
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--gold-soft);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.market-brief-copy h3 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.market-brief-copy p {
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.6;
+}
+
+.market-brief-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-brief-stats article {
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(234, 223, 189, 0.18);
+}
+
+.market-brief-stats span,
+.quote-panel span {
+  display: block;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  margin-bottom: 9px;
+}
+
+.market-brief-stats strong {
+  color: #fff;
+  font-size: clamp(19px, 1.6vw, 23px);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.market-layout {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.market-context {
+  display: grid;
+  gap: 12px;
+}
+
+.market-bridge {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-bridge article {
+  padding: 13px;
+  border-radius: 8px;
+  background: var(--soft);
+  border-top: 3px solid var(--gold);
+}
+
+.market-bridge span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.market-bridge strong {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+
+.market-bridge p,
+.market-evidence p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.market-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-evidence div {
+  padding: 14px;
+  border-radius: 8px;
+  background: #fbfaf5;
+  border: 1px solid #e8ddbd;
+}
+
+.market-evidence strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.market-evidence ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.market-evidence li + li {
+  margin-top: 5px;
+}
+
+.quote-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 260px;
+  background:
+    linear-gradient(145deg, #171b19, #2a261f 72%, #41351f);
+  color: #fff;
+  border-color: rgba(234, 223, 189, 0.26);
+}
+
+.quote-panel blockquote {
+  margin: 16px 0;
+  color: #fff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  line-height: 1.25;
+}
+
+.quote-panel p {
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.55;
 }
 
 .mos-line {
@@ -816,7 +1011,7 @@ input:focus-visible {
 
 .memo {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -848,7 +1043,8 @@ svg text {
 
 @media (max-width: 1050px) {
   .workspace,
-  .analysis-layout {
+  .analysis-layout,
+  .market-brief {
     grid-template-columns: 1fr;
   }
 
@@ -861,7 +1057,10 @@ svg text {
   .memo,
   .scenario-grid,
   .model-grid,
-  .custom-valuation {
+  .custom-valuation,
+  .market-brief-stats,
+  .market-bridge,
+  .market-evidence {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -890,7 +1089,10 @@ svg text {
   .evidence-grid,
   .quality-facts,
   .model-grid,
-  .custom-valuation {
+  .custom-valuation,
+  .market-brief-stats,
+  .market-bridge,
+  .market-evidence {
     grid-template-columns: 1fr;
   }
 

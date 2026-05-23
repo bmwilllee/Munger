@@ -227,6 +227,114 @@ function buildValuationScenarios({ latestFcf, latestShares, price, intrinsicValu
   };
 }
 
+function monthsBetween(dateLike, end = new Date()) {
+  if (!dateLike) return null;
+  const value = String(dateLike);
+  const normalized = value.includes("-")
+    ? value
+    : `${value.slice(0, 4)}-${value.slice(4, 6) || "12"}-${value.slice(6, 8) || "31"}`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.round((end - date) / (1000 * 60 * 60 * 24 * 30.44)));
+}
+
+function inferIndustryLens(company) {
+  const symbol = String(company.symbol || "").toUpperCase();
+  const name = String(company.shortName || "").toLowerCase();
+  const industry = String(company.industry || "").toLowerCase();
+  const sector = String(company.sector || "").toLowerCase();
+  const text = `${symbol} ${name} ${industry} ${sector}`;
+  if (/NVDA|AMD|MU|INTC|AVGO|TSM|QCOM|ASML|semiconductor|chip|memory/.test(text)) {
+    return {
+      label: "半导体 / 存储周期",
+      upside: "AI 算力、HBM / 存储价格、先进制程供给紧张可能让最新财报低估下一轮现金流。",
+      evidence: ["订单和 backlog 是否继续上修", "毛利率是否随产品结构改善", "库存天数和资本开支是否支持周期上行"],
+      risk: "周期股容易在景气高点看起来便宜，不能只用最近一个季度外推。",
+    };
+  }
+  if (/AAPL|MSFT|GOOGL|META|AMZN|software|internet|cloud|technology/.test(text)) {
+    return {
+      label: "大型科技 / AI 再定价",
+      upside: "市场可能在定价 AI 产品化、云需求恢复、服务收入或生态粘性的增量价值。",
+      evidence: ["收入增长是否重新加速", "AI / 云资本开支能否转化为高回报现金流", "利润率是否在投入周期后保持稳定"],
+      risk: "高预期会提前透支未来，任何增长放缓都会放大估值回撤。",
+    };
+  }
+  if (/BRK|bank|financial|insurance|asset|capital/.test(text)) {
+    return {
+      label: "金融 / 资本配置",
+      upside: "市场可能在定价利率环境、承保利润、投资组合再配置和回购纪律。",
+      evidence: ["净息差或承保利润是否改善", "资本充足率是否支持回购", "账面价值增长是否跟上价格"],
+      risk: "金融资产价值对利率和信用周期敏感，账面质量要优先于短期利润。",
+    };
+  }
+  if (/consumer|retail|restaurant|brand|staples/.test(text)) {
+    return {
+      label: "消费品牌 / 定价权",
+      upside: "市场可能在定价需求恢复、提价能力、渠道效率和品牌粘性。",
+      evidence: ["同店或销量是否恢复", "毛利率是否能守住", "库存和促销是否回到健康水平"],
+      risk: "消费品高估值需要持续复购和定价权，单次涨价不能代表长期护城河。",
+    };
+  }
+  return {
+    label: "通用市场再定价",
+    upside: "市场可能在定价财报尚未反映的新订单、价格、成本、利率或竞争格局变化。",
+    evidence: ["下一季收入指引是否变化", "利润率和现金流是否同步改善", "管理层是否用回购或资本开支验证信心"],
+    risk: "缺少行业证据时，股价变化只能说明预期变化，不能直接证明内在价值变化。",
+  };
+}
+
+function buildMarketContext(company, metrics) {
+  const tape = company.marketTape || {};
+  const lagMonths = monthsBetween(company.dataQuality?.latestFiled);
+  const price = n(company.price);
+  const base = metrics.intrinsicValue;
+  const bull = metrics.optimisticValue;
+  const impliedGrowth = metrics.impliedGrowth;
+  const premiumToBase = price && base ? (price - base) / base : null;
+  const premiumToBull = price && bull ? (price - bull) / bull : null;
+  const oneYearReturn = tape.return1y;
+  const quarterReturn = tape.return3m;
+  const trendScore = avg([
+    scoreByBands(quarterReturn, [[0.25, 88], [0.12, 76], [0.03, 62], [-0.08, 42]]),
+    scoreByBands(oneYearReturn, [[0.45, 88], [0.2, 74], [0.05, 60], [-0.15, 38]]),
+  ]);
+  const expectationScore = avg([
+    scoreByBands(impliedGrowth, [[0.03, 82], [0.07, 68], [0.12, 48], [0.18, 30]], true),
+    scoreByBands(premiumToBull, [[-0.15, 82], [0, 66], [0.35, 44], [0.8, 24]], true),
+  ]);
+  const recencyScore = lagMonths === null ? 50 : clamp(100 - lagMonths * 5, 20, 92);
+  const marketScore = Math.round(avg([trendScore, expectationScore * 1.15, recencyScore * 0.65]));
+  const lens = inferIndustryLens(company);
+  const level = marketScore >= 72
+    ? "市场变化可纳入上修假设"
+    : marketScore >= 55
+      ? "市场变化需要证据确认"
+      : "市场价格已提前透支较多";
+  const marketAwareValue = base && bull
+    ? base + (bull - base) * clamp((marketScore - 45) / 45, 0, 1)
+    : null;
+  const valuationGap = price && marketAwareValue ? (marketAwareValue - price) / price : null;
+  const bridge = [
+    lagMonths !== null ? `最新年报距今约 ${lagMonths} 个月，财报口径天然滞后。` : "无法精确计算财报滞后时间。",
+    Number.isFinite(quarterReturn) ? `近 3 个月价格变化 ${pct(quarterReturn)?.toFixed(1)}%，市场预期已经变化。` : "缺少足够历史价格来判断近期再定价。",
+    Number.isFinite(impliedGrowth) ? `当前价格要求约 ${pct(impliedGrowth)?.toFixed(1)}% 的长期 FCF 增长。` : "当前价格无法反推出稳定增长假设。",
+    Number.isFinite(premiumToBase) ? `现价相对保守价值溢价 ${pct(premiumToBase)?.toFixed(1)}%。` : "保守价值暂不可比。",
+  ];
+  return {
+    score: marketScore,
+    level,
+    lens,
+    lagMonths,
+    marketAwareValue,
+    valuationGap: pct(valuationGap),
+    premiumToBase: pct(premiumToBase),
+    premiumToBull: pct(premiumToBull),
+    bridge,
+    tape,
+  };
+}
+
 function analyze(company, source) {
   const f = company.financials;
   const revenue = f.revenue.map(Number);
@@ -278,6 +386,11 @@ function analyze(company, source) {
     optimisticValue,
     impliedGrowth,
     normalizedGrowth,
+  });
+  const marketContext = buildMarketContext(company, {
+    intrinsicValue,
+    optimisticValue,
+    impliedGrowth,
   });
 
   const qualityScore = avg([
@@ -355,6 +468,7 @@ function analyze(company, source) {
     moat,
     accountingQuality,
     valuationScenarios,
+    marketContext,
     scores: {
       overall,
       quality: Math.round(qualityScore),
@@ -403,6 +517,43 @@ function csvCells(line) {
   return line.split(",").map((cell) => cell.trim());
 }
 
+function dateKey(date) {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+function returnSince(rows, days) {
+  const clean = rows.filter((row) => Number.isFinite(row.close));
+  if (clean.length < 2) return null;
+  const latest = clean.at(-1);
+  const targetTime = latest.date.getTime() - days * 24 * 60 * 60 * 1000;
+  const start = [...clean].reverse().find((row) => row.date.getTime() <= targetTime) || clean[0];
+  return start.close ? latest.close / start.close - 1 : null;
+}
+
+function annualizedVolatility(rows) {
+  const clean = rows.filter((row) => Number.isFinite(row.close));
+  if (clean.length < 30) return null;
+  const returns = [];
+  for (let i = 1; i < clean.length; i += 1) {
+    returns.push(clean[i].close / clean[i - 1].close - 1);
+  }
+  return stdev(returns) * Math.sqrt(252);
+}
+
+function maxDrawdown(rows) {
+  let peak = 0;
+  let drawdown = 0;
+  for (const row of rows) {
+    if (!Number.isFinite(row.close)) continue;
+    peak = Math.max(peak, row.close);
+    if (peak > 0) drawdown = Math.min(drawdown, row.close / peak - 1);
+  }
+  return drawdown;
+}
+
 async function fetchStooqQuote(symbol) {
   const stooqSymbol = `${symbol.toLowerCase().replace(/\./g, "-")}.us`;
   const csv = await fetchText(`https://stooq.com/q/l/?s=${encodeURIComponent(stooqSymbol)}&f=sd2t2ohlcv&h&e=csv`);
@@ -419,6 +570,71 @@ async function fetchStooqQuote(symbol) {
     quoteTime: `${row.Date || ""} ${row.Time || ""}`.trim(),
     volume: n(row.Volume),
   };
+}
+
+async function fetchStooqHistory(symbol) {
+  const stooqSymbol = `${symbol.toLowerCase().replace(/\./g, "-")}.us`;
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 420);
+  const csv = await fetchText(`https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${dateKey(start)}&d2=${dateKey(end)}&i=d`);
+  const rows = csv.trim().split(/\r?\n/).slice(1)
+    .map((line) => {
+      const [date, open, high, low, close, volume] = csvCells(line);
+      return {
+        date: new Date(date),
+        open: n(open),
+        high: n(high),
+        low: n(low),
+        close: n(close),
+        volume: n(volume),
+      };
+    })
+    .filter((row) => !Number.isNaN(row.date.getTime()) && Number.isFinite(row.close));
+  if (rows.length < 2) throw new Error("Stooq historical data unavailable");
+  return {
+    return3m: returnSince(rows, 91),
+    return6m: returnSince(rows, 182),
+    return1y: returnSince(rows, 365),
+    volatility: annualizedVolatility(rows),
+    maxDrawdown: maxDrawdown(rows),
+    latestClose: rows.at(-1)?.close ?? null,
+    observations: rows.length,
+  };
+}
+
+async function fetchYahooHistory(symbol) {
+  const normalized = symbol.toUpperCase().replace(/\./g, "-");
+  const data = await fetchJson(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalized)}?range=1y&interval=1d`, {
+    "user-agent": "Mozilla/5.0 MungerValueAnalyzer/1.0",
+  });
+  const result = data?.chart?.result?.[0];
+  const timestamps = result?.timestamp || [];
+  const closes = result?.indicators?.quote?.[0]?.close || [];
+  const rows = timestamps.map((time, index) => ({
+    date: new Date(time * 1000),
+    close: n(closes[index]),
+  })).filter((row) => !Number.isNaN(row.date.getTime()) && Number.isFinite(row.close));
+  if (rows.length < 2) throw new Error("Yahoo chart returned insufficient data");
+  return {
+    return3m: returnSince(rows, 91),
+    return6m: returnSince(rows, 182),
+    return1y: returnSince(rows, 365),
+    volatility: annualizedVolatility(rows),
+    maxDrawdown: maxDrawdown(rows),
+    latestClose: rows.at(-1)?.close ?? null,
+    observations: rows.length,
+    source: "Yahoo chart",
+  };
+}
+
+async function fetchMarketTape(symbol) {
+  try {
+    const tape = await fetchStooqHistory(symbol);
+    return { ...tape, source: "Stooq history" };
+  } catch {
+    return fetchYahooHistory(symbol).catch(() => null);
+  }
 }
 
 async function fetchSecTickerMap() {
@@ -563,9 +779,10 @@ async function fetchSecFundamentals(symbol) {
 }
 
 async function fetchRealCompany(symbol) {
-  const [fundamentals, quote] = await Promise.all([
+  const [fundamentals, quote, marketTape] = await Promise.all([
     fetchSecFundamentals(symbol),
     fetchStooqQuote(symbol),
+    fetchMarketTape(symbol),
   ]);
   const latestShares = last(fundamentals.financials.shares);
   const marketCap = quote.price && latestShares ? quote.price * latestShares * 1_000_000 : null;
@@ -576,6 +793,7 @@ async function fetchRealCompany(symbol) {
     marketCap,
     beta: null,
     quoteTime: quote.quoteTime,
+    marketTape,
   };
 }
 

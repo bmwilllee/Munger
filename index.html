@@ -91,6 +91,28 @@
             </article>
           </section>
 
+          <section class="market-brief panel">
+            <div class="market-brief-copy">
+              <span class="eyebrow">Market Repricing Lens</span>
+              <h3>市场再定价</h3>
+              <p id="market-summary">等待市场价格带和反向 DCF。</p>
+            </div>
+            <div class="market-brief-stats">
+              <article>
+                <span>市场修正价值</span>
+                <strong id="market-aware-value">--</strong>
+              </article>
+              <article>
+                <span>近 3 个月</span>
+                <strong id="market-return-3m">--</strong>
+              </article>
+              <article>
+                <span>证据评分</span>
+                <strong id="market-score">--</strong>
+              </article>
+            </div>
+          </section>
+
           <section class="grid metrics-grid" id="metric-grid"></section>
 
           <section class="analysis-layout">
@@ -136,6 +158,22 @@
                 <span class="label-with-info">市场隐含增长 <button type="button" class="info-button" data-info="市场隐含增长" aria-label="解释 市场隐含增长">i</button></span>
                 <strong id="implied-growth">--</strong>
               </div>
+            </div>
+          </section>
+
+          <section class="analysis-layout market-layout">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>市场变化校准 <button type="button" class="info-button" data-info="市场变化校准" aria-label="解释 市场变化校准">i</button></h3>
+                <span id="market-lens-label">--</span>
+              </div>
+              <div id="market-context-panel" class="market-context"></div>
+            </div>
+
+            <div class="panel quote-panel">
+              <span>Charlie Munger Lens</span>
+              <blockquote id="munger-quote">The big money is not in the buying or selling, but in the waiting.</blockquote>
+              <p id="quote-note">等待分析后匹配一句投资纪律。</p>
             </div>
           </section>
 
@@ -222,6 +260,6 @@
       <strong id="info-title"></strong>
       <p id="info-body"></p>
     </div>
-    <script src="/app.js?v=20260521-accounting-notes" type="module"></script>
+    <script src="/app.js?v=20260523-market-repricing" type="module"></script>
   </body>
 </html>

@@ -30,6 +30,7 @@ const explanations = {
   "P / FCF": "市值相当于自由现金流的多少倍。它比市盈率更关注真实现金。",
   "保守内在价值": "用较谨慎假设估算的每股价值。它不是精确答案，只是安全边际参考。",
   "乐观价值": "在更乐观增长和折现假设下的估值，用来观察上行情景。",
+  "市场修正价值": "在保守价值和乐观价值之间，根据近期价格变化、财报滞后和市场隐含预期做的证据加权情景。它不是目标价，而是提醒你市场变化可能需要重新验证。",
   "安全边际": "估算价值高出现价的空间。空间越大，越能抵御判断错误。",
   "芒格式四象限": "把公司拆成质量、持久性、管理层、估值四个方向，帮助先排除明显不合格的标的。",
   "安全边际模块": "比较当前价格和估算价值。价值投资通常希望用明显低于价值的价格买入。",
@@ -39,7 +40,31 @@ const explanations = {
   "估值情景与买入区间": "用多种假设估值，并给出带安全边际的参考买入价。",
   "数据可信度": "展示财报覆盖年份、报价时间、缺失字段和估值可信度。它帮助你先判断这份分析能不能直接用于研究。",
   "可调估值模型": "用自己的增长、折现率、永续增长和安全边际假设重算 DCF。固定模型给方向，调参模型用来做压力测试。",
+  "市场变化校准": "把最新股价、过去几个月价格带、财报滞后和反向 DCF 放在一起看。它不会把市场情绪直接算成价值，只提示市场正在押注哪些变化。",
 };
+
+const mungerQuotes = [
+  {
+    test: (data) => (data.metrics?.marginOfSafety ?? 0) < 0,
+    quote: "The big money is not in the buying or selling, but in the waiting.",
+    note: "好公司不等于好价格。价格提前反映太多变化时，等待本身就是纪律。",
+  },
+  {
+    test: (data) => (data.marketContext?.score ?? 0) >= 72,
+    quote: "A great business at a fair price is superior to a fair business at a great price.",
+    note: "如果市场变化有证据支撑，可以把情景上修，但仍要确认这真是伟大生意。",
+  },
+  {
+    test: (data) => (data.accountingQuality?.score ?? 0) < 65,
+    quote: "All I want to know is where I'm going to die, so I'll never go there.",
+    note: "财报质量先排雷。现金流、债务和稀释不干净时，估值再漂亮也要慢一点。",
+  },
+  {
+    test: () => true,
+    quote: "Invert, always invert.",
+    note: "先问什么会让这个判断错，再决定要不要继续研究。",
+  },
+];
 
 function display(value, suffix = "", fallback = "--") {
   if (!Number.isFinite(value)) return fallback;
@@ -132,6 +157,7 @@ function renderStoredLists() {
 function renderMetrics(data) {
   const m = data.metrics;
   const c = data.company;
+  const mc = data.marketContext || {};
   const cards = [
     ["营收复合增长", display(m.revenueGrowth, "%"), "近年经营规模扩张速度"],
     ["ROIC", display(m.roic, "%"), "芒格偏爱的资本效率指标"],
@@ -142,6 +168,7 @@ function renderMetrics(data) {
     ["P / FCF", display(m.pfcf, "x"), "现金流估值倍数"],
     ["保守内在价值", money(m.intrinsicValue, c.currency), "10 年 DCF，含安全折扣"],
     ["乐观价值", money(m.optimisticValue, c.currency), "较高增长、较低折现率情景"],
+    ["市场修正价值", money(mc.marketAwareValue, c.currency), "财报滞后后的证据加权情景"],
     ["安全边际", display(m.marginOfSafety, "%"), "保守价值相对现价的折让"],
   ];
   metricGrid.replaceChildren(...cards.map(([label, value, note]) => metricCard(label, value, note)));
@@ -184,12 +211,13 @@ function renderDecisionStrip(data) {
   const risks = [
     data.metrics?.marginOfSafety < 0 ? "价格高于保守价值" : null,
     data.metrics?.impliedGrowth > 12 ? "市场隐含增长偏高" : null,
+    data.marketContext?.premiumToBull > 20 ? "现价高于乐观情景较多" : null,
     data.moat?.risks?.[0] || null,
     data.accountingQuality?.flags?.find((flag) => flag.status === "fail")?.detail || null,
   ].filter(Boolean);
   setText("#action-label", decisionAction(data));
   setText("#risk-label", risks[0] || "暂未出现单一主风险");
-  setText("#discipline-label", `理想价 ${money(data.valuationScenarios?.buyZones?.[0]?.value, data.company.currency)}`);
+  setText("#discipline-label", `先验证 ${data.marketContext?.lens?.label || "市场变化"}`);
 }
 
 function renderDataQuality(data) {
@@ -205,6 +233,63 @@ function renderDataQuality(data) {
     ["替代口径", fallbacks],
     ["来源", `${quality.filingSource || "SEC EDGAR"} / ${quality.quoteSource || "Stooq"}`],
   ].map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+}
+
+function marketToneClass(score) {
+  if (score >= 72) return "strong";
+  if (score >= 55) return "watch";
+  return "stretched";
+}
+
+function renderMarketContext(data) {
+  const context = data.marketContext || {};
+  const tape = context.tape || {};
+  const currency = data.company.currency;
+  const tone = marketToneClass(context.score || 0);
+  document.querySelector(".market-brief").className = `market-brief panel ${tone}`;
+  setText("#market-summary", `${context.level || "市场变化待确认"}。${context.lens?.upside || "用价格带和反向 DCF 判断市场正在押注什么。"}`);
+  setText("#market-aware-value", money(context.marketAwareValue, currency));
+  setText("#market-return-3m", display(Number.isFinite(tape.return3m) ? tape.return3m * 100 : null, "%"));
+  setText("#market-score", Number.isFinite(context.score) ? `${context.score}/100` : "--");
+  setText("#market-lens-label", context.lens?.label || "--");
+
+  const bridge = (context.bridge || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  const evidence = (context.lens?.evidence || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  document.querySelector("#market-context-panel").innerHTML = `
+    <div class="market-bridge">
+      <article>
+        <span>财报滞后</span>
+        <strong>${Number.isFinite(context.lagMonths) ? `${context.lagMonths} 个月` : "--"}</strong>
+        <p>年报负责事实，市场价格负责预期；两者之间要用证据桥接。</p>
+      </article>
+      <article>
+        <span>市场修正空间</span>
+        <strong>${display(context.valuationGap, "%")}</strong>
+        <p>市场修正价值相对现价的空间，不等同于买入建议。</p>
+      </article>
+      <article>
+        <span>1 年价格变化</span>
+        <strong>${display(Number.isFinite(tape.return1y) ? tape.return1y * 100 : null, "%")}</strong>
+        <p>价格带帮助识别财报之后的预期迁移。</p>
+      </article>
+    </div>
+    <div class="market-evidence">
+      <div>
+        <strong>市场正在定价</strong>
+        <ul>${bridge}</ul>
+      </div>
+      <div>
+        <strong>把价值上修前要验证</strong>
+        <ul>${evidence}</ul>
+        <p>${escapeHtml(context.lens?.risk || "")}</p>
+      </div>
+    </div>`;
+}
+
+function renderMungerQuote(data) {
+  const match = mungerQuotes.find((item) => item.test(data));
+  setText("#munger-quote", match.quote);
+  setText("#quote-note", match.note);
 }
 
 function updateCustomValuation() {
@@ -303,6 +388,7 @@ function renderValuation(data) {
   const values = [
     ["当前价格", company.price, "price"],
     ["保守内在价值", metrics.intrinsicValue, ""],
+    ["市场修正价值", data.marketContext?.marketAwareValue, "market"],
     ["乐观价值", metrics.optimisticValue, ""],
   ];
   const max = Math.max(...values.map(([, v]) => Number.isFinite(v) ? v : 0), 1);
@@ -468,7 +554,15 @@ function renderScenarios(data) {
   const scenarios = data.valuationScenarios;
   if (!scenarios) return;
   setText("#expectation-label", scenarios.currentExpectation);
-  const cases = scenarios.cases.map((item) =>
+  const allCases = [
+    ...scenarios.cases,
+    {
+      name: "市场修正情景",
+      value: data.marketContext?.marketAwareValue,
+      assumptions: `${data.marketContext?.lens?.label || "市场变化"}：证据加权，不直接追价`,
+    },
+  ];
+  const cases = allCases.map((item) =>
     `<article class="scenario-item">
       <header><strong>${item.name}</strong><span>DCF</span></header>
       <b class="scenario-value">${money(item.value, data.company.currency)}</b>
@@ -499,6 +593,7 @@ function buildMemoText(data) {
     "",
     `结论：${decisionAction(data)}。${data.verdict}`,
     `价格：现价 ${money(c.price, c.currency)}；理想买入价约 ${money(ideal, c.currency)}；安全边际 ${display(m.marginOfSafety, "%")}。`,
+    `市场再定价：${data.marketContext?.level || "--"}；市场修正价值 ${money(data.marketContext?.marketAwareValue, c.currency)}；近 3 个月 ${display(Number.isFinite(data.marketContext?.tape?.return3m) ? data.marketContext.tape.return3m * 100 : null, "%")}。`,
     `质量：ROIC ${display(m.roic, "%")}，自由现金流率 ${display(m.fcfMargin, "%")}，护城河 ${data.moat?.level || "--"}。`,
     `财报：${data.accountingQuality?.label || "--"}，数据可信度 ${data.dataQuality?.confidence || "中"}。`,
     "",
@@ -521,6 +616,9 @@ function renderMemo(data) {
   const price = Number.isFinite(m.marginOfSafety) && m.marginOfSafety > 15
     ? "当前价格相对保守估值留出一定空间，可以继续做业务和竞争格局尽调。"
     : "当前价格没有明显安全边际，除非你对长期增长有高确定性，否则需要更谨慎的买入价。";
+  const market = data.marketContext?.score >= 72
+    ? `市场变化评分 ${data.marketContext.score}/100，可以把“${data.marketContext.lens?.label || "市场变化"}”纳入上修假设，但必须等待后续财报验证。`
+    : `市场变化评分 ${data.marketContext?.score ?? "--"}/100，更像预期迁移而非已经确认的内在价值提升。`;
   const questions = [
     m.impliedGrowth > 12 ? "市场隐含增长偏高，先证明未来现金流能跟上。" : "拆分长期增长来源：销量、价格、回购和利润率。",
     data.moat?.risks?.[0] || "用年报、竞争对手和客户结构验证护城河来源。",
@@ -531,6 +629,7 @@ function renderMemo(data) {
     ["动作", `${decisionAction(data)}。${data.verdict}`],
     ["生意质量", moat],
     ["财报可信度", accounting],
+    ["市场变化", market],
     ["价格判断", `${price} 现价为 ${money(c.price, c.currency)}，理想买入价约 ${money(data.valuationScenarios?.buyZones?.[0]?.value, c.currency)}。`],
     ["买入前验证", `<ol>${questions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>`],
   ].map(([title, body]) => `<div class="memo-block"><strong>${title}</strong>${body}</div>`).join("");
@@ -581,6 +680,8 @@ function render(data) {
   warning.textContent = data.warning || data.notice || "";
   renderDecisionStrip(data);
   renderDataQuality(data);
+  renderMarketContext(data);
+  renderMungerQuote(data);
   renderMetrics(data);
   renderRadar(data.scores);
   renderValuation(data);

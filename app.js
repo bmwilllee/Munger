@@ -163,7 +163,7 @@ function hideSuggestions() {
 }
 
 function renderSuggestions(results) {
-  if (!results.length) {
+  if (!results.length || document.activeElement !== input) {
     hideSuggestions();
     return;
   }
@@ -259,6 +259,35 @@ function renderDecisionStrip(data) {
   setText("#action-label", decisionAction(data));
   setText("#risk-label", risks[0] || "暂未出现单一主风险");
   setText("#discipline-label", `先验证 ${data.marketContext?.lens?.label || "市场变化"}`);
+}
+
+function buildMungerConclusion(data) {
+  const m = data.metrics || {};
+  const c = data.company || {};
+  const action = decisionAction(data);
+  const moat = data.moat?.level || "护城河待验证";
+  const accounting = data.accountingQuality?.label || "财报质量待复核";
+  const implied = Number.isFinite(m.impliedGrowth) ? `市场大约要求 ${display(m.impliedGrowth, "%")} 的隐含增长` : "市场隐含增长暂时算不清";
+  const priceLine = Number.isFinite(m.marginOfSafety) && m.marginOfSafety >= 15
+    ? `价格给了 ${display(m.marginOfSafety, "%")} 的安全边际`
+    : `价格没有给出足够安全边际，当前安全边际为 ${display(m.marginOfSafety, "%")}`;
+  const inversion = data.accountingQuality?.score < 65
+    ? "先反过来问：这些利润到底是不是现金，债务和库存会不会在坏年份伤人。"
+    : data.moat?.score < 68
+      ? "先反过来问：如果竞争者拿走定价权，这些漂亮数字还能不能留下。"
+      : "先反过来问：如果增长放慢、估值回到平常年份，这笔买入还会不会舒服。";
+  const temperament = action === "好公司，等价格"
+    ? "这类公司最容易让人因为喜欢生意而忘记价格，正确动作通常是把它放在桌上，等市场犯错。"
+    : action === "继续深度尽调"
+      ? "它值得继续研究，但研究的目的不是寻找兴奋点，而是寻找会推翻判断的事实。"
+      : action === "只放入观察"
+        ? "它还没到可以下注的程度，观察比行动更便宜，也更符合纪律。"
+        : "这不是需要急着证明自己聪明的地方，排除平庸机会本身就是投资收益的一部分。";
+  return `${c.shortName || c.symbol} 的结论是：${action}。${moat}，${accounting}；${priceLine}，${implied}。${inversion}${temperament}`;
+}
+
+function renderMungerConclusion(data) {
+  setText("#munger-conclusion", buildMungerConclusion(data));
 }
 
 function renderDataQuality(data) {
@@ -719,6 +748,7 @@ function render(data) {
   document.querySelector("#overall-ring").style.setProperty("--score", data.scores.overall);
   warning.hidden = !(data.warning || data.notice);
   warning.textContent = data.warning || data.notice || "";
+  renderMungerConclusion(data);
   renderDecisionStrip(data);
   renderDataQuality(data);
   renderMarketContext(data);
@@ -746,6 +776,7 @@ async function analyze(symbol) {
   button.disabled = true;
   button.textContent = "分析中";
   warning.hidden = true;
+  setText("#munger-conclusion", "正在用反向思考、护城河和安全边际重读这家公司。");
   try {
     const res = await fetch(`/api/analyze?symbol=${encodeURIComponent(symbol)}`);
     const data = await res.json();

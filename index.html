@@ -21,11 +21,8 @@
           <form id="analyze-form" class="search-box">
             <label for="symbol">股票代码</label>
             <div class="input-row">
-              <input id="symbol" name="symbol" value="AAPL" autocomplete="off" spellcheck="false" aria-describedby="search-help" />
+              <input id="symbol" name="symbol" value="AAPL" autocomplete="off" spellcheck="false" />
               <button type="submit">分析</button>
-            </div>
-            <div id="search-help" class="search-help">
-              <span>可输入公司名或全球代码</span>
             </div>
             <div id="search-suggestions" class="search-suggestions" hidden></div>
             <div class="quick-symbols" aria-label="常用股票">
@@ -80,6 +77,11 @@
 
           <div id="warning" class="warning" hidden></div>
 
+          <section class="munger-conclusion" aria-live="polite">
+            <span>芒格式思考建议</span>
+            <p id="munger-conclusion">等待分析后生成结论。</p>
+          </section>
+
           <section class="decision-strip">
             <article>
               <span>当前动作</span>
@@ -93,6 +95,47 @@
               <span>买入纪律</span>
               <strong id="discipline-label">--</strong>
             </article>
+          </section>
+
+          <section class="analysis-layout">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>安全边际 <button type="button" class="info-button" data-info="安全边际模块" aria-label="解释 安全边际">i</button></h3>
+                <span>保守 DCF 与当前价格</span>
+              </div>
+              <div class="valuation-bars" id="valuation-bars"></div>
+              <div class="mos-line">
+                <span class="label-with-info">市场隐含增长 <button type="button" class="info-button" data-info="市场隐含增长" aria-label="解释 市场隐含增长">i</button></span>
+                <strong id="implied-growth">--</strong>
+              </div>
+            </div>
+
+            <div class="panel checklist-panel">
+              <div class="panel-head">
+                <h3>决策清单</h3>
+                <span>长期持有前的门槛</span>
+              </div>
+              <div id="checklist" class="checklist"></div>
+            </div>
+          </section>
+
+          <section class="panel memo-panel">
+            <div class="panel-head">
+              <h3>投资备忘录</h3>
+              <div class="memo-actions">
+                <button type="button" id="copy-memo">复制</button>
+                <button type="button" id="download-memo">导出 Markdown</button>
+              </div>
+            </div>
+            <div id="memo" class="memo"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>估值情景与买入区间 <button type="button" class="info-button" data-info="估值情景与买入区间" aria-label="解释 估值情景与买入区间">i</button></h3>
+              <span id="expectation-label">--</span>
+            </div>
+            <div id="scenario-panel" class="scenario-grid"></div>
           </section>
 
           <section class="market-brief panel">
@@ -122,46 +165,18 @@
           <section class="analysis-layout">
             <div class="panel">
               <div class="panel-head">
-                <h3>数据可信度 <button type="button" class="info-button" data-info="数据可信度" aria-label="解释 数据可信度">i</button></h3>
-                <span id="quality-confidence">--</span>
+                <h3>护城河证据 <button type="button" class="info-button" data-info="护城河证据" aria-label="解释 护城河证据">i</button></h3>
+                <span id="moat-level">--</span>
               </div>
-              <div id="data-quality-panel" class="quality-facts"></div>
-            </div>
-
-            <div class="panel compare-panel">
-              <div class="panel-head">
-                <h3>公司对比</h3>
-                <span>质量 / 现金流 / 价格</span>
-              </div>
-              <form id="compare-form" class="compare-form">
-                <input id="compare-symbols" value="MSFT, GOOGL" aria-label="对比股票代码" />
-                <button type="submit">对比</button>
-              </form>
-              <div id="compare-table" class="compare-table"></div>
-            </div>
-          </section>
-
-          <section class="analysis-layout">
-            <div class="panel">
-              <div class="panel-head">
-                <h3>芒格式四象限 <button type="button" class="info-button" data-info="芒格式四象限" aria-label="解释 芒格式四象限">i</button></h3>
-                <span>质量 / 持久性 / 管理层 / 估值</span>
-              </div>
-              <div class="radar-wrap">
-                <svg id="radar" viewBox="0 0 280 260" role="img" aria-label="四象限评分雷达图"></svg>
-              </div>
+              <div id="moat-panel" class="evidence-grid"></div>
             </div>
 
             <div class="panel">
               <div class="panel-head">
-                <h3>安全边际 <button type="button" class="info-button" data-info="安全边际模块" aria-label="解释 安全边际">i</button></h3>
-                <span>保守 DCF 与当前价格</span>
+                <h3>财报质量 <button type="button" class="info-button" data-info="财报质量模块" aria-label="解释 财报质量">i</button></h3>
+                <span id="accounting-label">--</span>
               </div>
-              <div class="valuation-bars" id="valuation-bars"></div>
-              <div class="mos-line">
-                <span class="label-with-info">市场隐含增长 <button type="button" class="info-button" data-info="市场隐含增长" aria-label="解释 市场隐含增长">i</button></span>
-                <strong id="implied-growth">--</strong>
-              </div>
+              <div id="accounting-panel" class="quality-list"></div>
             </div>
           </section>
 
@@ -198,39 +213,15 @@
               </div>
             </div>
 
-            <div class="panel checklist-panel">
-              <div class="panel-head">
-                <h3>决策清单</h3>
-                <span>长期持有前的门槛</span>
-              </div>
-              <div id="checklist" class="checklist"></div>
-            </div>
-          </section>
-
-          <section class="analysis-layout">
             <div class="panel">
               <div class="panel-head">
-                <h3>护城河证据 <button type="button" class="info-button" data-info="护城河证据" aria-label="解释 护城河证据">i</button></h3>
-                <span id="moat-level">--</span>
+                <h3>芒格式四象限 <button type="button" class="info-button" data-info="芒格式四象限" aria-label="解释 芒格式四象限">i</button></h3>
+                <span>质量 / 持久性 / 管理层 / 估值</span>
               </div>
-              <div id="moat-panel" class="evidence-grid"></div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-head">
-                <h3>财报质量 <button type="button" class="info-button" data-info="财报质量模块" aria-label="解释 财报质量">i</button></h3>
-                <span id="accounting-label">--</span>
+              <div class="radar-wrap">
+                <svg id="radar" viewBox="0 0 280 260" role="img" aria-label="四象限评分雷达图"></svg>
               </div>
-              <div id="accounting-panel" class="quality-list"></div>
             </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h3>估值情景与买入区间 <button type="button" class="info-button" data-info="估值情景与买入区间" aria-label="解释 估值情景与买入区间">i</button></h3>
-              <span id="expectation-label">--</span>
-            </div>
-            <div id="scenario-panel" class="scenario-grid"></div>
           </section>
 
           <section class="panel model-panel">
@@ -247,15 +238,26 @@
             <div id="custom-valuation" class="custom-valuation"></div>
           </section>
 
-          <section class="panel memo-panel">
-            <div class="panel-head">
-              <h3>投资备忘录</h3>
-              <div class="memo-actions">
-                <button type="button" id="copy-memo">复制</button>
-                <button type="button" id="download-memo">导出 Markdown</button>
+          <section class="analysis-layout support-layout">
+            <div class="panel">
+              <div class="panel-head">
+                <h3>数据可信度 <button type="button" class="info-button" data-info="数据可信度" aria-label="解释 数据可信度">i</button></h3>
+                <span id="quality-confidence">--</span>
               </div>
+              <div id="data-quality-panel" class="quality-facts"></div>
             </div>
-            <div id="memo" class="memo"></div>
+
+            <div class="panel compare-panel">
+              <div class="panel-head">
+                <h3>公司对比</h3>
+                <span>质量 / 现金流 / 价格</span>
+              </div>
+              <form id="compare-form" class="compare-form">
+                <input id="compare-symbols" value="MSFT, GOOGL" aria-label="对比股票代码" />
+                <button type="submit">对比</button>
+              </form>
+              <div id="compare-table" class="compare-table"></div>
+            </div>
           </section>
         </section>
       </section>

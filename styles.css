@@ -166,15 +166,40 @@ input:focus-visible {
 }
 
 .search-help {
+  display: grid;
+  gap: 7px;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.35;
+}
+
+.market-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.market-examples button {
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid #d7ded8;
+  border-radius: 999px;
+  background: #fbfaf5;
+  color: #52625a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.market-examples button:hover {
+  border-color: var(--gold);
+  color: var(--ink);
+  filter: none;
 }
 
 .search-suggestions {
   position: absolute;
   z-index: 12;
-  top: 102px;
+  top: 130px;
   left: 0;
   right: 0;
   display: grid;
